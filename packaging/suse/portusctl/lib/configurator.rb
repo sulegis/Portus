@@ -15,7 +15,8 @@ class Configurator
     TemplateWriter.process(
       "apache2_portus.conf.erb",
       "/etc/apache2/vhosts.d/portus.conf",
-      binding)
+      binding
+    )
 
     if @options["secure"]
       Runner.exec("a2enmod", ["ssl"])
@@ -26,20 +27,12 @@ class Configurator
   end
 
   # Performs the following operations:
-  #   * create the ssl certificates
-  #   * copy the cerificates to the right locations
+  #   * create the ssl certificates if specified
+  #   * check the presence of the required files
+  #   * copy the certificates to the right locations
   def ssl
-    unless File.exist?("/etc/apache2/ssl.key/#{HOSTNAME}-ca.key")
-      puts <<EOM
-Generating private key and certificate"
-************************************************************************
-If you want to use your own private key and certificates, upload them to
-  * /etc/apache2/ssl.key/#{HOSTNAME}-ca.key"
-  * /etc/apache2/ssl.crt/#{HOSTNAME}-ca.crt"
-  * /etc/apache2/ssl.crt/#{HOSTNAME}-ca.crt"
-and then re-run this script"
-************************************************************************
-EOM
+    if @options["ssl-gen-self-signed-certs"]
+      puts "Generating private key and certificate"
       args = [
         "-C", HOSTNAME,
         "-n", HOSTNAME,
@@ -53,24 +46,36 @@ EOM
       Runner.exec("gensslcert", args)
     end
 
-    FileUtils.chown("wwwrun", "www", "/etc/apache2/ssl.key")
-    FileUtils.chmod(0750, "/etc/apache2/ssl.key")
+    handle_own_certs @options["ssl-certs-dir"].chomp \
+      unless @options["ssl-certs-dir"].chomp.empty?
 
-    FileUtils.chown("wwwrun", "www", "/etc/apache2/ssl.key/#{HOSTNAME}-ca.key")
-    FileUtils.chmod(0440, "/etc/apache2/ssl.key/#{HOSTNAME}-ca.key")
+    key_file = "/etc/apache2/ssl.key/#{HOSTNAME}-ca.key"
+    crt_file = "/etc/apache2/ssl.crt/#{HOSTNAME}-ca.crt"
+
+    missing_file(key_file) unless File.exist?(key_file)
+    missing_file(crt_file) unless File.exist?(crt_file)
+
+    FileUtils.chown("wwwrun", "www", "/etc/apache2/ssl.key")
+    FileUtils.chmod(0o750, "/etc/apache2/ssl.key")
+
+    FileUtils.chown("wwwrun", "www", key_file)
+    FileUtils.chmod(0o440, key_file)
 
     # Create key used by Portus to sign the JWT tokens
     FileUtils.ln_sf(
-      "/etc/apache2/ssl.key/#{HOSTNAME}-ca.key",
-      File.join("/srv/Portus/config", "server.key"))
+      key_file,
+      File.join("/srv/Portus/config", "server.key")
+    )
 
     FileUtils.cp(
-      "/etc/apache2/ssl.crt/#{HOSTNAME}-ca.crt",
-      "/srv/www/htdocs")
-    FileUtils.chmod(0755, "/srv/www/htdocs/#{HOSTNAME}-ca.crt")
+      crt_file,
+      "/srv/www/htdocs"
+    )
+    FileUtils.chmod(0o755, "/srv/www/htdocs/#{HOSTNAME}-ca.crt")
     FileUtils.cp(
-      "/etc/apache2/ssl.crt/#{HOSTNAME}-ca.crt",
-      "/etc/pki/trust/anchors")
+      crt_file,
+      "/etc/pki/trust/anchors"
+    )
     Runner.exec("update-ca-certificates")
   end
 
@@ -79,13 +84,20 @@ EOM
     TemplateWriter.process(
       "database.yml.erb",
       "/srv/Portus/config/database.yml",
-      binding)
+      binding
+    )
     FileUtils.chown("root", "www", "/srv/Portus/config/database.yml")
-    FileUtils.chmod(0640, "/srv/Portus/config/database.yml")
+    FileUtils.chmod(0o640, "/srv/Portus/config/database.yml")
   end
 
   # Creates the database and performs the migrations
   def create_database
+    if dockerized?
+      puts "Running inside of a docker container"
+      puts "No systemd support, skipping mysql configuration"
+      return
+    end
+
     Runner.activate_service("mysql") if database_local?
 
     env_variables = {
@@ -116,12 +128,14 @@ EOM
       FileUtils.mkdir_p(ssldir)
       FileUtils.ln_sf(
         "/etc/apache2/ssl.crt/#{HOSTNAME}-ca.crt",
-        File.join(ssldir, "portus.crt"))
+        File.join(ssldir, "portus.crt")
+      )
 
       TemplateWriter.process(
         "registry.yml.erb",
         "/etc/registry/config.yml",
-        binding)
+        binding
+      )
     else
       TemplateWriter.render("registry.yml.erb", binding)
     end
@@ -137,9 +151,10 @@ EOM
     TemplateWriter.process(
       "config-local.yml.erb",
       "/srv/Portus/config/config-local.yml",
-      binding)
+      binding
+    )
     FileUtils.chown("root", "www", "/srv/Portus/config/config-local.yml")
-    FileUtils.chmod(0640, "/srv/Portus/config/config-local.yml")
+    FileUtils.chmod(0o640, "/srv/Portus/config/config-local.yml")
   end
 
   # Creates the secrets.yml file used by Rails
@@ -149,9 +164,10 @@ EOM
     TemplateWriter.process(
       "secrets.yml.erb",
       destination,
-      binding)
+      binding
+    )
     FileUtils.chown("root", "www", destination)
-    FileUtils.chmod(0640, destination)
+    FileUtils.chmod(0o640, destination)
   end
 
   # Ensures all the required services are running
@@ -165,7 +181,7 @@ EOM
     # portusctl runs as root and creates this file for the 1st time, so
     # we must fix its permissions
     FileUtils.chown_R("root", "www", "/srv/Portus/log/production.log")
-    FileUtils.chmod_R(0664, "/srv/Portus/log/production.log")
+    FileUtils.chmod_R(0o664, "/srv/Portus/log/production.log")
 
     services = [
       ["portus_crono", false],

@@ -11,7 +11,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20151215152138) do
+ActiveRecord::Schema.define(version: 20160614122012) do
 
   create_table "activities", force: :cascade do |t|
     t.integer  "trackable_id",   limit: 4
@@ -54,7 +54,7 @@ ActiveRecord::Schema.define(version: 20151215152138) do
   create_table "crono_jobs", force: :cascade do |t|
     t.string   "job_id",            limit: 255, null: false
     t.datetime "last_performed_at"
-    t.boolean  "healthy",           limit: 1
+    t.boolean  "healthy"
     t.datetime "created_at",                    null: false
     t.datetime "updated_at",                    null: false
   end
@@ -66,10 +66,10 @@ ActiveRecord::Schema.define(version: 20151215152138) do
     t.datetime "created_at",                                null: false
     t.datetime "updated_at",                                null: false
     t.integer  "team_id",     limit: 4
-    t.boolean  "public",      limit: 1,     default: false
     t.integer  "registry_id", limit: 4,                     null: false
-    t.boolean  "global",      limit: 1,     default: false
+    t.boolean  "global",                    default: false
     t.text     "description", limit: 65535
+    t.integer  "visibility",  limit: 4
   end
 
   add_index "namespaces", ["name", "registry_id"], name: "index_namespaces_on_name_and_registry_id", unique: true, using: :btree
@@ -82,17 +82,18 @@ ActiveRecord::Schema.define(version: 20151215152138) do
     t.string   "hostname",   limit: 255, null: false
     t.datetime "created_at",             null: false
     t.datetime "updated_at",             null: false
-    t.boolean  "use_ssl",    limit: 1
+    t.boolean  "use_ssl"
   end
 
   add_index "registries", ["hostname"], name: "index_registries_on_hostname", unique: true, using: :btree
   add_index "registries", ["name"], name: "index_registries_on_name", unique: true, using: :btree
 
   create_table "repositories", force: :cascade do |t|
-    t.string   "name",         limit: 255, default: "", null: false
+    t.string   "name",         limit: 255, default: "",    null: false
     t.integer  "namespace_id", limit: 4
-    t.datetime "created_at",                            null: false
-    t.datetime "updated_at",                            null: false
+    t.datetime "created_at",                               null: false
+    t.datetime "updated_at",                               null: false
+    t.boolean  "marked",                   default: false
   end
 
   add_index "repositories", ["name", "namespace_id"], name: "index_repositories_on_name_and_namespace_id", unique: true, using: :btree
@@ -116,6 +117,8 @@ ActiveRecord::Schema.define(version: 20151215152138) do
     t.datetime "updated_at",                                   null: false
     t.integer  "user_id",       limit: 4
     t.string   "digest",        limit: 255
+    t.string   "image_id",      limit: 255, default: ""
+    t.boolean  "marked",                    default: false
   end
 
   add_index "tags", ["name", "repository_id"], name: "index_tags_on_name_and_repository_id", unique: true, using: :btree
@@ -137,7 +140,7 @@ ActiveRecord::Schema.define(version: 20151215152138) do
     t.string   "name",        limit: 255
     t.datetime "created_at",                                null: false
     t.datetime "updated_at",                                null: false
-    t.boolean  "hidden",      limit: 1,     default: false
+    t.boolean  "hidden",                    default: false
     t.text     "description", limit: 65535
   end
 
@@ -157,19 +160,66 @@ ActiveRecord::Schema.define(version: 20151215152138) do
     t.string   "last_sign_in_ip",        limit: 255
     t.datetime "created_at"
     t.datetime "updated_at"
-    t.boolean  "admin",                  limit: 1,   default: false
-    t.boolean  "enabled",                limit: 1,   default: true
+    t.boolean  "admin",                              default: false
+    t.boolean  "enabled",                            default: true
     t.string   "ldap_name",              limit: 255
     t.integer  "failed_attempts",        limit: 4,   default: 0
     t.datetime "locked_at"
+    t.integer  "namespace_id",           limit: 4
+    t.string   "display_name",           limit: 255
   end
 
+  add_index "users", ["display_name"], name: "index_users_on_display_name", unique: true, using: :btree
   add_index "users", ["email"], name: "index_users_on_email", unique: true, using: :btree
-  add_index "users", ["ldap_name"], name: "index_users_on_ldap_name", unique: true, using: :btree
+  add_index "users", ["namespace_id"], name: "index_users_on_namespace_id", using: :btree
   add_index "users", ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true, using: :btree
   add_index "users", ["username"], name: "index_users_on_username", unique: true, using: :btree
+
+  create_table "webhook_deliveries", force: :cascade do |t|
+    t.integer  "webhook_id",      limit: 4
+    t.string   "uuid",            limit: 255
+    t.integer  "status",          limit: 4
+    t.text     "request_header",  limit: 65535
+    t.text     "request_body",    limit: 65535
+    t.text     "response_header", limit: 65535
+    t.text     "response_body",   limit: 65535
+    t.datetime "created_at",                    null: false
+    t.datetime "updated_at",                    null: false
+  end
+
+  add_index "webhook_deliveries", ["webhook_id", "uuid"], name: "index_webhook_deliveries_on_webhook_id_and_uuid", unique: true, using: :btree
+  add_index "webhook_deliveries", ["webhook_id"], name: "index_webhook_deliveries_on_webhook_id", using: :btree
+
+  create_table "webhook_headers", force: :cascade do |t|
+    t.integer  "webhook_id", limit: 4
+    t.string   "name",       limit: 255
+    t.string   "value",      limit: 255
+    t.datetime "created_at",             null: false
+    t.datetime "updated_at",             null: false
+  end
+
+  add_index "webhook_headers", ["webhook_id", "name"], name: "index_webhook_headers_on_webhook_id_and_name", unique: true, using: :btree
+  add_index "webhook_headers", ["webhook_id"], name: "index_webhook_headers_on_webhook_id", using: :btree
+
+  create_table "webhooks", force: :cascade do |t|
+    t.integer  "namespace_id",   limit: 4
+    t.string   "url",            limit: 255
+    t.string   "username",       limit: 255
+    t.string   "password",       limit: 255
+    t.integer  "request_method", limit: 4
+    t.integer  "content_type",   limit: 4
+    t.boolean  "enabled",                    default: false
+    t.datetime "created_at",                                 null: false
+    t.datetime "updated_at",                                 null: false
+  end
+
+  add_index "webhooks", ["namespace_id"], name: "index_webhooks_on_namespace_id", using: :btree
 
   add_foreign_key "comments", "repositories"
   add_foreign_key "stars", "repositories"
   add_foreign_key "stars", "users"
+  add_foreign_key "users", "namespaces"
+  add_foreign_key "webhook_deliveries", "webhooks"
+  add_foreign_key "webhook_headers", "webhooks"
+  add_foreign_key "webhooks", "namespaces"
 end

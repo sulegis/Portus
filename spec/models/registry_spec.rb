@@ -1,3 +1,20 @@
+# == Schema Information
+#
+# Table name: registries
+#
+#  id         :integer          not null, primary key
+#  name       :string(255)      not null
+#  hostname   :string(255)      not null
+#  created_at :datetime         not null
+#  updated_at :datetime         not null
+#  use_ssl    :boolean
+#
+# Indexes
+#
+#  index_registries_on_hostname  (hostname) UNIQUE
+#  index_registries_on_name      (name) UNIQUE
+#
+
 require "rails_helper"
 
 # Open up Portus::RegistryClient to inspect some attributes.
@@ -24,7 +41,7 @@ class RegistryMock < Registry
       end
     else
       def o.manifest(*_)
-        { "tag" => "latest" }
+        ["id", "digest", { "tag" => "latest" }]
       end
 
       def o.tags(*_)
@@ -49,11 +66,8 @@ class RegistryReachableClient < Registry
   end
 
   def reachable?
-    if @constant.nil?
-      @result
-    else
-      raise @constant
-    end
+    raise @constant unless @constant.nil?
+    @result
   end
 end
 
@@ -89,9 +103,7 @@ describe Registry, type: :model do
       expect(Namespace.count).to be(0)
 
       create(:registry)
-      User.all.each do |user|
-        expect(Namespace.find_by(name: user.username)).not_to be(nil)
-      end
+      User.all.each { |user| expect(user.namespace).not_to be(nil) }
     end
 
     it "#create_namespaces!" do
@@ -168,7 +180,7 @@ describe Registry, type: :model do
 
       # Differentiate between global & local namespace
 
-      ret  = mock.get_tag_from_target_test(create_empty_namespace,
+      ret = mock.get_tag_from_target_test(create_empty_namespace,
                                            "busybox",
                                            "application/vnd.docker.distribution.manifest.v2+json",
                                            "sha:1234")
@@ -202,7 +214,7 @@ describe Registry, type: :model do
       expect(Rails.logger).to receive(:info).with(/Could not fetch the tag/)
       expect(Rails.logger).to receive(:info).with(/Reason: Some message/)
 
-      ret  = mock.get_tag_from_target_test(create_empty_namespace,
+      ret = mock.get_tag_from_target_test(create_empty_namespace,
                                            "busybox",
                                            "application/vnd.docker.distribution.manifest.v2+json",
                                            "sha:1234")
@@ -218,7 +230,7 @@ describe Registry, type: :model do
       mock.get_tag_from_target_test(nil, "busybox", "a", "sha:1234")
     end
 
-    it "fetches the tag from the target if it exists", focus: true do
+    it "fetches the tag from the target if it exists" do
       mock = RegistryMock.new(false)
 
       # We leave everything empty to show that if the tag is provided, we pick

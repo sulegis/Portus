@@ -4,7 +4,7 @@ module ApplicationHelper
     if APP_CONFIG.enabled?("gravatar") && !email.nil? && !email.empty?
       gravatar_image_tag(email)
     else
-      image_tag "user.svg", class: "user-picture"
+      content_tag :i, nil, class: "fa fa-user user-picture"
     end
   end
 
@@ -29,7 +29,8 @@ module ApplicationHelper
   def markdown(text)
     extensions = {
       superscript:                  true,
-      disable_indented_code_blocks: true
+      disable_indented_code_blocks: true,
+      fenced_code_blocks:           true
     }
     render_options = {
       filter_html:         true,
@@ -38,8 +39,12 @@ module ApplicationHelper
       safe_links_only:     true,
       space_after_headers: true
     }
+
     renderer = Redcarpet::Render::HTML.new(render_options)
     m = Redcarpet::Markdown.new(renderer, extensions)
+
+    # rubocop:disable Rails/OutputSafety
     m.render(text).html_safe
+    # rubocop:enable Rails/OutputSafety
   end
 end

@@ -34,11 +34,11 @@ feature "Teams support" do
 
       click_button "Add"
       wait_for_ajax
-      wait_for_effect_on("#alert")
+      wait_for_effect_on("#float-alert")
       expect(Team.count).to eql teams_count
       expect(current_path).to eql teams_path
       expect(page).to have_content("Name has already been taken")
-      expect(page).to have_css("#alert .alert.alert-dismissible.alert-info")
+      expect(page).to have_css("#float-alert .alert.alert-dismissible.alert-info")
     end
 
     scenario "A team can be created from the index page", js: true do
@@ -56,7 +56,7 @@ feature "Teams support" do
       expect(current_path).to eql teams_path
       expect(page).to have_content("valid-team")
 
-      wait_for_effect_on("#alert")
+      wait_for_effect_on("#float-alert")
       expect(page).to have_content("The team 'valid-team' was created successfully")
     end
 
@@ -104,6 +104,7 @@ feature "Teams support" do
 
   describe "teams#show" do
     let!(:another) { create(:user) }
+    let!(:another_admin) { create(:admin) }
 
     before :each do
       visit team_path(team)
@@ -137,10 +138,24 @@ feature "Teams support" do
       find("#add_team_user_form .btn").click
 
       wait_for_ajax
-      wait_for_effect_on("#alert")
+      wait_for_effect_on("#float-alert")
 
       expect(page).to have_content("New user added to the team")
       expect(page).to have_content("Contributor")
+    end
+
+    scenario "An admin can only be added as a team owner", js: true do
+      find("#add_team_user_btn").click
+      wait_for_effect_on("#add_team_user_form")
+      find("#team_user_role").select "Contributor"
+      find("#team_user_user").set another_admin.username
+      find("#add_team_user_form .btn").click
+
+      wait_for_ajax
+      wait_for_effect_on("#float-alert")
+
+      expect(page).to have_content("New user added to the team (promoted to")
+      expect(page).to have_content("Owner")
     end
 
     scenario "New team members have to exist on the system", js: true do
@@ -151,7 +166,7 @@ feature "Teams support" do
       find("#add_team_user_form .btn").click
 
       wait_for_ajax
-      wait_for_effect_on("#alert")
+      wait_for_effect_on("#float-alert")
 
       expect(page).to have_content("User cannot be found")
     end
@@ -167,7 +182,7 @@ feature "Teams support" do
       find(".popover-content .btn-primary").click
 
       wait_for_ajax
-      wait_for_effect_on("#alert")
+      wait_for_effect_on("#float-alert")
 
       expect(page).to have_content("User removed from the team")
     end
@@ -180,7 +195,7 @@ feature "Teams support" do
       find(".popover-content .btn-primary").click
 
       wait_for_ajax
-      wait_for_effect_on("#alert")
+      wait_for_effect_on("#float-alert")
 
       expect(page).to have_content("Cannot remove the only owner of the team")
     end

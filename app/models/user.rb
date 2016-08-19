@@ -1,22 +1,50 @@
+# == Schema Information
+#
+# Table name: users
+#
+#  id                     :integer          not null, primary key
+#  username               :string(255)      default(""), not null
+#  email                  :string(255)      default("")
+#  encrypted_password     :string(255)      default(""), not null
+#  reset_password_token   :string(255)
+#  reset_password_sent_at :datetime
+#  remember_created_at    :datetime
+#  sign_in_count          :integer          default("0"), not null
+#  current_sign_in_at     :datetime
+#  last_sign_in_at        :datetime
+#  current_sign_in_ip     :string(255)
+#  last_sign_in_ip        :string(255)
+#  created_at             :datetime
+#  updated_at             :datetime
+#  admin                  :boolean          default("0")
+#  enabled                :boolean          default("1")
+#  ldap_name              :string(255)
+#  failed_attempts        :integer          default("0")
+#  locked_at              :datetime
+#  display_name           :string(255)
+#  namespace_id           :integer
+#
+# Indexes
+#
+#  index_users_on_display_name          (display_name) UNIQUE
+#  index_users_on_email                 (email) UNIQUE
+#  index_users_on_namespace_id          (namespace_id)
+#  index_users_on_reset_password_token  (reset_password_token) UNIQUE
+#  index_users_on_username              (username) UNIQUE
+#
+
 class User < ActiveRecord::Base
   devise :database_authenticatable, :registerable, :lockable,
          :recoverable, :rememberable, :trackable, :validatable, authentication_keys: [:username]
 
-  USERNAME_CHARS  = "a-z0-9"
-  USERNAME_FORMAT = /\A[#{USERNAME_CHARS}]{4,30}\Z/
-
   APPLICATION_TOKENS_MAX = 5
 
-  validates :username, presence: true, uniqueness: true,
-    format: {
-      with:    USERNAME_FORMAT,
-      message: "Only alphanumeric characters are allowed. Minimum 4 characters, maximum 30."
-    }
-
   # Actions performed before/after create.
-  validate :private_namespace_available, on: :create
+  validates :username, presence: true, uniqueness: true
+  validate :private_namespace_and_team_available, on: :create
   after_create :create_personal_namespace!
 
+  belongs_to :namespace
   has_many :team_users
   has_many :teams, through: :team_users
   has_many :stars
@@ -29,17 +57,35 @@ class User < ActiveRecord::Base
   # Special method used by Devise to require an email on signup. This is always
   # true except for LDAP.
   def email_required?
-    !(Portus::LDAP.enabled? && !ldap_name.nil?)
+    !(Portus::LDAP.enabled? && email.blank?)
   end
 
-  def private_namespace_available
-    return unless Namespace.exists?(name: username)
-    errors.add(:username, "cannot be used as name for private namespace")
+  # It adds an error if the username clashes with either a namespace or a team.
+  def private_namespace_and_team_available
+    ns = Namespace.make_valid(username)
+
+    if ns.nil?
+      errors.add(:username, "'#{username}' cannot be transformed into a " \
+        "valid namespace name")
+    elsif Namespace.exists?(name: ns)
+      clar = (ns != username) ? " (modified so it's valid)" : ""
+      errors.add(:username, "cannot be used: there is already a namespace " \
+        "named '#{ns}'#{clar}")
+    elsif Team.exists?(name: username)
+      errors.add(:username, "cannot be used: there is already a team named " \
+        "like this")
+    end
   end
 
   # Returns true if the current user is the Portus user.
   def portus?
     username == "portus"
+  end
+
+  # Returns the username to be displayed.
+  def display_username
+    return username unless APP_CONFIG.enabled?("display_name")
+    display_name.blank? ? username : display_name
   end
 
   # This method will be called automatically once a user is created. It will
@@ -49,27 +95,31 @@ class User < ActiveRecord::Base
     # the registry is not configured yet, we cannot create the namespace
     return unless Registry.any?
 
-    team = Team.find_by(name: username)
-    if team.nil?
-      team = Team.create!(name: username, owners: [self], hidden: true)
-    end
+    # Leave early if the namespace already exists. This is fine because the
+    # `private_namespace_and_team_available` method has already checked that
+    # the name of the namespace is fine and that it doesn't clash.
+    namespace_name = Namespace.make_valid(username)
+    ns = Namespace.find_by(name: namespace_name)
+    return ns if ns
+
+    # Note that this shouldn't be a problem since the User controller will make
+    # sure that we don't create a user that clashes with this team.
+    team = Team.create!(name: username, owners: [self], hidden: true)
 
     default_description = "This personal namespace belongs to #{username}."
-    Namespace.find_or_create_by!(
+    namespace = Namespace.find_or_create_by!(
       team:        team,
-      name:        username,
+      name:        namespace_name,
+      visibility:  Namespace.visibilities[:visibility_private],
       description: default_description,
       registry:    Registry.get # TODO: fix once we handle more registries
     )
+    update_attributes(namespace: namespace)
   end
 
   # Find the user that can be guessed from the given push event.
   def self.find_from_event(event)
-    if Portus::LDAP.enabled?
-      actor = User.find_by(ldap_name: event["actor"]["name"])
-    else
-      actor = User.find_by(username: event["actor"]["name"])
-    end
+    actor = User.find_by(username: event["actor"]["name"])
     logger.error "Cannot find user #{event["actor"]["name"]}" if actor.nil?
     actor
   end

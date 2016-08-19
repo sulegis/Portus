@@ -1,3 +1,18 @@
+# == Schema Information
+#
+# Table name: application_tokens
+#
+#  id          :integer          not null, primary key
+#  application :string(255)      not null
+#  token_hash  :string(255)      not null
+#  token_salt  :string(255)      not null
+#  user_id     :integer          not null
+#
+# Indexes
+#
+#  index_application_tokens_on_user_id  (user_id)
+#
+
 require "rails_helper"
 
 describe ApplicationToken do
@@ -44,7 +59,8 @@ describe ApplicationToken do
         )
       end.to raise_error(
         ActiveRecord::RecordInvalid,
-        /Users cannot have more than #{User::APPLICATION_TOKENS_MAX} application tokens/)
+        /Users cannot have more than #{User::APPLICATION_TOKENS_MAX} application tokens/
+      )
     end
   end
 end

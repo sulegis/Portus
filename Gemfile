@@ -1,6 +1,6 @@
 source "https://rubygems.org"
 
-gem "rails", "~> 4.2.2"
+gem "rails", "~> 4.2.6"
 gem "jquery-rails"
 gem "sass-rails", ">= 3.2"
 gem "slim"
@@ -21,7 +21,11 @@ gem "net-ldap"
 gem "redcarpet"
 gem "font-awesome-rails"
 gem "bootstrap-typeahead-rails"
-gem "rails_stdout_logging", group: [:development, :staging, :production]
+gem "rails_stdout_logging", "~> 0.0.5", group: [:development, :staging, :production]
+
+# Pinning these specific versions because that's what we have on OBS.
+gem "ethon", "~> 0.9.0"
+gem "typhoeus", "~> 1.0.2"
 
 # Used to store application tokens. This is already a Rails depedency. However
 # better safe than sorry...
@@ -56,12 +60,16 @@ end
 # PACKAGING=yes bundle list
 
 unless ENV["PACKAGING"] && ENV["PACKAGING"] == "yes"
-
   group :development do
+    gem "annotate"
+    gem "rails-erd"
     gem "quiet_assets"
     gem "pry-rails"
     gem "git-review", require: false
     gem "rack-mini-profiler", require: false
+    gem "guard", require: false
+    gem "guard-rubocop", require: false
+    gem "guard-rspec", require: false
   end
 
   group :development, :test do
@@ -74,7 +82,10 @@ unless ENV["PACKAGING"] && ENV["PACKAGING"] == "yes"
     gem "wirble"
     gem "factory_girl_rails"
     gem "ffaker"
-    gem "rubocop", require: false
+    gem "rubocop", "~> 0.41.2", require: false
+    gem "brakeman", require: false
+    gem "database_cleaner"
+    gem "md2man", "~>5.1.1", require: false
   end
 
   group :test do
@@ -85,10 +96,9 @@ unless ENV["PACKAGING"] && ENV["PACKAGING"] == "yes"
     gem "simplecov", require: false
     gem "capybara"
     gem "poltergeist", require: false
-    gem "database_cleaner"
     gem "json-schema"
     gem "timecop"
     gem "codeclimate-test-reporter", group: :test, require: nil
+    gem "docker-api", "~> 1.28.0"
   end
-
 end

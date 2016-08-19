@@ -4,6 +4,18 @@ class Cli < Thor
   option "secure", desc: "Toggle SSL usage for Portus", type: :boolean, default: true
 
   # SSL certificate options
+  option "ssl-gen-self-signed-certs",
+    desc:    "Generate self-signed certificates",
+    type:    :boolean,
+    default: false
+  option "ssl-certs-dir",
+    desc:      "Location of own certificates",
+    default:   "",
+    long_desc: <<-LONGDESC
+Looks for the following required certificate files in the specified folder:
+   * `<custom dir>/<hostname>-ca.key`: the certificate key
+   * `<custom dir>/<hostname>-ca.crt`: the certificate file
+  LONGDESC
   option "ssl-organization",
     desc:    "SSL certificate: organization",
     default: "SUSE Linux GmbH" # gensslcert -o
@@ -18,7 +30,7 @@ class Cli < Thor
     default: "DE" # gensslcert -c
   option "ssl-city",
     desc:    "SSL certificate: city",
-    default: "Nueremberg" # gensslcert -l
+    default: "Nuernberg" # gensslcert -l
   option "ssl-state",
     desc:    "SSL certificate: state",
     default: "Bayern" # gensslcert -s
@@ -97,7 +109,12 @@ class Cli < Thor
   # JWT EXPIRATION TIME
   option "jwt-expiration-time",
     desc:    "Expiration time for the JWT token used by Portus",
-    default: "5.minutes"
+    default: 5
+
+  # Catalog pagination
+  option "catalog-page",
+    desc:    "Pagination value for API calls to the registry",
+    default: 100
 
   # FIRST USER
   option "first-user-admin-enable",
@@ -105,9 +122,35 @@ class Cli < Thor
     type:    :boolean,
     default: true
 
+  # Display name
+  option "display-name-enable",
+    desc:    "Enable users to set a display name",
+    type:    :boolean,
+    default: false
+
+  option "delete-enable",
+    desc:    "Enable delete support. Only do this if your registry is 2.4 or higher",
+    type:    :boolean,
+    default: false
+
+  option "change-visibility-enable",
+    desc:    "Allow users to change the visibility of their namespaces",
+    type:    :boolean,
+    default: true
+
+  option "manage-namespace-enable",
+    desc:    "Allow users to modify their namespaces",
+    type:    :boolean,
+    default: true
+
+  option "manage-team-enable",
+    desc:    "Allow users to modify their teams",
+    type:    :boolean,
+    default: true
+
   def setup
     ensure_root
-    check_setup_flags
+    check_setup_flags options
 
     configure = Configurator.new(options)
     configure.apache
@@ -130,10 +173,10 @@ class Cli < Thor
   def make_admin(username)
     if username.nil? || username.empty?
       # This will print the list of usernames
-      Runner.bundler_exec("rake", "make_admin", {})
+      Runner.bundler_exec("rake", "portus:make_admin", {})
     else
       # Rake tasks look weird when they accept parameters
-      Runner.bundler_exec("rake", "make_admin[#{username}]", {})
+      Runner.bundler_exec("rake", "portus:make_admin[#{username}]", {})
     end
   end
 
@@ -168,22 +211,5 @@ class Cli < Thor
     Runner.produce_crono_log_file!
     Runner.exec("cp", ["/var/log/apache2/error_log", File.join(PORTUS_ROOT, "log/production.log")])
     Runner.tar_files("log/production.log", "log/crono.log", "log/versions.log")
-  end
-
-  private
-
-  def ensure_root
-    return if Process.uid == 0
-
-    warn "Must run as root user"
-    exit 1
-  end
-
-  def check_setup_flags
-    return unless options["ldap-enable"] && \
-        (options["ldap-hostname"].nil? || options["ldap-hostname"].empty?)
-
-    warn "LDAP support is enabled but you didn't specify a value for ldap-hostname"
-    exit 1
   end
 end

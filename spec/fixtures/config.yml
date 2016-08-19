@@ -6,3 +6,11 @@ ldap:
   hostname: "ldap_hostname"
   port: 389
   base: ""
+  authentication:
+    enabled: false
+    bind_dn: ""
+    password: "mypassword"
+
+email:
+  smtp:
+    enabled: true

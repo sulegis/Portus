@@ -38,6 +38,18 @@ module Portus
       hsh
     end
 
+    # Hide any sensitive value, replacing it with "*" characters.
+    def hide_password(hsh)
+      hsh.each do |k, v|
+        if v.is_a?(Hash)
+          hsh[k] = hide_password(v)
+        elsif k == "password"
+          hsh[k] = "****"
+        end
+      end
+      hsh
+    end
+
     private
 
     # Get the typed value of the specified environment variable. If it doesn't
@@ -48,8 +60,8 @@ module Portus
       return nil if env.nil?
 
       # Try to convert it into a boolean value.
-      return true if env.downcase == "true"
-      return false if env.downcase == "false"
+      return true if env.casecmp("true").zero?
+      return false if env.casecmp("false").zero?
 
       # Try to convert it into an integer. Otherwise just keep the string.
       begin
